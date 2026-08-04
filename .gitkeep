@@ -1,0 +1,7 @@
+New-Item models\.gitkeep -ItemType File
+New-Item memory\.gitkeep -ItemType File
+New-Item documents\.gitkeep -ItemType File
+New-Item database\.gitkeep -ItemType File
+New-Item plugins\.gitkeep -ItemType File
+New-Item logs\.gitkeep -ItemType File
+New-Item data\.gitkeep -ItemType File
