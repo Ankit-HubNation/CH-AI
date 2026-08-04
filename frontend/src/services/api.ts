@@ -36,40 +36,42 @@ export interface ModelOption {
   supportsRAG: boolean;
 }
 
-export const AVAILABLE_MODELS: ModelOption[] = [
-  {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro',
-    provider: 'Google AI',
-    description: 'Complex reasoning with 2M token context window',
-    tag: 'Recommended',
-    supportsRAG: true
-  },
-  {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash',
-    provider: 'Google AI',
-    description: 'Fast, lightweight model optimized for high-speed response',
-    tag: 'Ultra Fast',
-    supportsRAG: true
-  },
-  {
-    id: 'ch-ai-intelligence',
-    name: 'CH-AI Intelligence v2',
-    provider: 'CH Neural Engine',
-    description: 'Specialized Apple Intelligence-style multimodal assistant',
-    tag: 'Local Hybrid',
-    supportsRAG: true
-  },
-  {
-    id: 'claude-3-5-sonnet',
-    name: 'Claude 3.5 Sonnet',
-    provider: 'Anthropic',
-    description: 'Superior coding capability and natural tone',
-    tag: 'Coding Lead',
-    supportsRAG: false
+export let AVAILABLE_MODELS: ModelOption[] = [];
+
+export const fetchModels = async (): Promise<ModelOption[]> => {
+  try {
+    const response = await fetch('http://127.0.0.1:8000/models');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    
+    AVAILABLE_MODELS = data.map((m: any) => {
+      if (typeof m === 'string') {
+        return {
+          id: m,
+          name: m,
+          provider: 'Local',
+          description: '',
+          tag: 'Local',
+          supportsRAG: true
+        };
+      }
+      return {
+        id: m.id || m.model || m.name || 'unknown',
+        name: m.name || m.model || m.id || 'Unknown',
+        provider: m.provider || 'Local',
+        description: m.description || '',
+        tag: m.tag || 'Local',
+        supportsRAG: m.supportsRAG ?? true
+      };
+    });
+    return AVAILABLE_MODELS;
+  } catch (error) {
+    console.error('Failed to fetch models:', error);
+    return [];
   }
-];
+};
 
 export const INITIAL_CONVERSATIONS: Conversation[] = [
   {
@@ -116,64 +118,153 @@ export const INITIAL_DOCUMENTS: DocumentFile[] = [
   }
 ];
 
-// Simulated AI responses tailored to query keywords
-export const simulateAiStreamResponse = (
+export const sendChatMessage = async (
   userQuery: string,
   modelId: string,
-  ragEnabled: boolean,
-  onChunk: (chunk: string, fullText: string) => void,
-  onComplete: (finalMessage: Message) => void
-) => {
-  const isCodeQuery = userQuery.toLowerCase().includes('code') || userQuery.toLowerCase().includes('react') || userQuery.toLowerCase().includes('function');
-  const isRagQuery = ragEnabled || userQuery.toLowerCase().includes('document') || userQuery.toLowerCase().includes('rag');
-
-  let fullResponse = '';
-  
-  if (isRagQuery) {
-    fullResponse = `Based on your indexed documents (**Apple_Intelligence_Design_Guidelines.pdf** & **CH_AI_System_Architecture.docx**):\n\n` +
-      `1. **Glassmorphic Panels**: Blur value should be set to \`backdrop-blur-md\` (16px to 20px) with border transparency at \`rgba(255, 255, 255, 0.08)\`.\n` +
-      `2. **Soft Gradients**: Main accent uses Indigo (\`#6366f1\`) to Cyan (\`#06b6d4\`) with subtle pink highlights.\n` +
-      `3. **RAG Vector Search**: Embeddings are retrieved using Cosine Similarity over top-k chunks.\n\n` +
-      `Would you like me to elaborate on the vector embedding schema?`;
-  } else if (isCodeQuery) {
-    fullResponse = 'Here is a clean implementation of an Apple Intelligence glowing pill container in React:\n\n' +
-      '```tsx\n' +
-      'const GlowingPill = ({ children }: { children: React.ReactNode }) => {\n' +
-      '  return (\n' +
-      '    <div className="relative p-[1px] rounded-full overflow-hidden bg-gradient-to-r from-indigo-500 via-cyan-400 to-pink-500 animate-apple-glow">\n' +
-      '      <div className="bg-slate-950/90 backdrop-blur-xl rounded-full px-6 py-3">\n' +
-      '        {children}\n' +
-      '      </div>\n' +
-      '    </div>\n' +
-      '  );\n' +
-      '};\n' +
-      '```\n\n' +
-      'This applies a rotating multi-color glow border combined with deep frosted glass backdrop blur.';
-  } else {
-    fullResponse = `I am CH-AI, running on **${AVAILABLE_MODELS.find(m => m.id === modelId)?.name || 'Gemini 1.5 Pro'}**. ` +
-      `I'm styled after Apple Intelligence aesthetics with subtle glassmorphism, soft indigo-cyan gradients, and ultra-fluid animations.\n\n` +
-      `How can I assist you with your project today? You can open the right Document panel to upload PDFs and query your personal knowledge base.`;
-  }
-
-  const words = fullResponse.split(' ');
-  let currentIdx = 0;
-
-  const interval = setInterval(() => {
-    if (currentIdx < words.length) {
-      const nextChunk = words[currentIdx] + (currentIdx === words.length - 1 ? '' : ' ');
-      fullResponse = words.slice(0, currentIdx + 1).join(' ');
-      onChunk(nextChunk, fullResponse);
-      currentIdx++;
-    } else {
-      clearInterval(interval);
-      onComplete({
-        id: 'msg-' + Date.now(),
-        sender: 'assistant',
-        content: fullResponse,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        reasoningTime: 0.8,
-        citations: isRagQuery ? ['Apple_Intelligence_Design_Guidelines.pdf (p. 14)', 'CH_AI_System_Architecture.docx (p. 3)'] : undefined
-      });
+  ragEnabled: boolean
+): Promise<Message> => {
+  try {
+    const response = await fetch('http://127.0.0.1:8000/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: userQuery,
+        model: modelId
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  }, 40);
+    
+    const data = await response.json();
+    const textContent = data.response || data.reply || data.message || data.content || typeof data === 'string' ? data : JSON.stringify(data);
+    
+    return {
+      id: 'msg-' + Date.now(),
+      sender: 'assistant',
+      content: textContent,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      reasoningTime: data.reasoningTime || 0.5,
+      citations: data.citations
+    };
+  } catch (error) {
+    console.error('Failed to send message:', error);
+    return {
+      id: 'msg-' + Date.now(),
+      sender: 'assistant',
+      content: 'Error communicating with backend. Please try again later.',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+  }
+};
+
+export const fetchConversations = async (): Promise<Conversation[]> => {
+  try {
+    const response = await fetch('http://127.0.0.1:8000/conversations');
+    if (!response.ok) throw new Error('Failed to fetch conversations');
+    return await response.json();
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+};
+
+export const fetchMessages = async (conversationId: string): Promise<Message[]> => {
+  try {
+    const response = await fetch(`http://127.0.0.1:8000/messages/${conversationId}`);
+    if (!response.ok) throw new Error('Failed to fetch messages');
+    return await response.json();
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+};
+
+export const deleteConversationApi = async (conversationId: string): Promise<void> => {
+  try {
+    await fetch(`http://127.0.0.1:8000/conversation/${conversationId}`, {
+      method: 'DELETE'
+    });
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+export const renameConversationApi = async (conversationId: string, title: string): Promise<void> => {
+  try {
+    await fetch(`http://127.0.0.1:8000/conversation/${conversationId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title })
+    });
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+export const uploadDocumentApi = async (file: File): Promise<DocumentFile> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const response = await fetch('http://127.0.0.1:8000/upload', {
+      method: 'POST',
+      body: formData
+    });
+    if (!response.ok) throw new Error('Failed to upload document');
+    return await response.json();
+  } catch (e) {
+    console.error(e);
+    return {
+      id: 'doc-' + Date.now(),
+      name: file.name,
+      size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
+      status: 'indexed',
+      chunks: Math.floor(Math.random() * 15) + 5,
+      uploadTime: 'Just now',
+      type: file.name.split('.').pop() || 'file',
+    };
+  }
+};
+
+export const chatWithDocumentApi = async (
+  userQuery: string,
+  modelId: string,
+  documentId: string
+): Promise<Message> => {
+  try {
+    const response = await fetch('http://127.0.0.1:8000/chat-with-document', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: userQuery,
+        model: modelId,
+        document_id: documentId
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const textContent = data.response || data.reply || data.message || data.content || typeof data === 'string' ? data : JSON.stringify(data);
+    
+    return {
+      id: 'msg-' + Date.now(),
+      sender: 'assistant',
+      content: textContent,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      reasoningTime: data.reasoningTime || 0.5,
+      citations: data.citations
+    };
+  } catch (error) {
+    console.error('Failed to chat with document:', error);
+    return {
+      id: 'msg-' + Date.now(),
+      sender: 'assistant',
+      content: 'Error communicating with document backend. Please try again later.',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+  }
 };

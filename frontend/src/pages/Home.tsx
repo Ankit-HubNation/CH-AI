@@ -9,7 +9,13 @@ import {
   type Conversation,
   type Message,
   type DocumentFile,
-  simulateAiStreamResponse,
+  sendChatMessage,
+  fetchConversations,
+  fetchMessages,
+  deleteConversationApi,
+  renameConversationApi,
+  uploadDocumentApi,
+  chatWithDocumentApi
 } from '../services/api';
 
 export const Home: React.FC = () => {
@@ -18,44 +24,36 @@ export const Home: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState('gemini-1.5-pro');
   const [ragEnabled, setRagEnabled] = useState(true);
 
-  const [conversations, setConversations] = useState<Conversation[]>(INITIAL_CONVERSATIONS);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>('conv-1');
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   
   // Store messages per conversation
-  const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>({
-    'conv-1': [
-      {
-        id: 'm1',
-        sender: 'user',
-        content: 'Design an Apple Intelligence inspired UI for CH-AI assistant.',
-        timestamp: '12:44 PM',
-      },
-      {
-        id: 'm2',
-        sender: 'assistant',
-        content: 'Here is the sleek design layout using Tailwind CSS, glassmorphism, and indigo-cyan glows.\n\n' +
-          '```tsx\n' +
-          'export const AppleGlowCard = () => (\n' +
-          '  <div className="glass-panel p-6 rounded-3xl border border-white/10 shadow-apple-glow">\n' +
-          '    <h3 className="gradient-text-apple font-bold">CH-AI Intelligence</h3>\n' +
-          '  </div>\n' +
-          ');\n' +
-          '```\n\n' +
-          'You can upload documents in the right panel to activate real-time vector RAG context.',
-        timestamp: '12:45 PM',
-        reasoningTime: 0.6,
-      },
-    ],
-  });
+  const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>({});
+
+  React.useEffect(() => {
+    fetchConversations().then(async data => {
+      setConversations(data);
+      if (data.length > 0) {
+        setActiveConversationId(data[0].id);
+        const msgs = await fetchMessages(data[0].id);
+        setMessagesMap(prev => ({ ...prev, [data[0].id]: msgs }));
+      }
+    });
+  }, []);
 
   const [documents, setDocuments] = useState<DocumentFile[]>(INITIAL_DOCUMENTS);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // Active messages list
   const activeMessages = activeConversationId ? (messagesMap[activeConversationId] || []) : [];
 
-  const handleSelectConversation = (id: string) => {
+  const handleSelectConversation = async (id: string) => {
     setActiveConversationId(id);
+    if (!messagesMap[id]) {
+      const msgs = await fetchMessages(id);
+      setMessagesMap(prev => ({ ...prev, [id]: msgs }));
+    }
   };
 
   const handleNewChat = () => {
@@ -72,7 +70,8 @@ export const Home: React.FC = () => {
     setMessagesMap(prev => ({ ...prev, [newId]: [] }));
   };
 
-  const handleDeleteConversation = (id: string) => {
+  const handleDeleteConversation = async (id: string) => {
+    await deleteConversationApi(id);
     setConversations(prev => prev.filter(c => c.id !== id));
     setMessagesMap(prev => {
       const copy = { ...prev };
@@ -81,11 +80,24 @@ export const Home: React.FC = () => {
     });
     if (activeConversationId === id) {
       const remaining = conversations.filter(c => c.id !== id);
-      setActiveConversationId(remaining.length > 0 ? remaining[0].id : null);
+      if (remaining.length > 0) {
+        setActiveConversationId(remaining[0].id);
+        if (!messagesMap[remaining[0].id]) {
+          const msgs = await fetchMessages(remaining[0].id);
+          setMessagesMap(prev => ({ ...prev, [remaining[0].id]: msgs }));
+        }
+      } else {
+        setActiveConversationId(null);
+      }
     }
   };
 
-  const handleSendMessage = (text: string, attachedFiles?: string[]) => {
+  const handleRenameConversation = async (id: string, title: string) => {
+    await renameConversationApi(id, title);
+    setConversations(prev => prev.map(c => c.id === id ? { ...c, title } : c));
+  };
+
+  const handleSendMessage = async (text: string, attachedFiles?: string[]) => {
     let currentConvId = activeConversationId;
 
     // If no active conversation exists, create a new one
@@ -132,68 +144,32 @@ export const Home: React.FC = () => {
 
     setIsLoading(true);
 
-    // Create placeholder streaming assistant message
-    const streamMsgId = 'ast-' + Date.now();
-    const streamingAssistantMsg: Message = {
-      id: streamMsgId,
-      sender: 'assistant',
-      content: '',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isStreaming: true,
-    };
+    const finalMessage = ragEnabled && selectedDocumentId
+      ? await chatWithDocumentApi(text, selectedModel, selectedDocumentId)
+      : await sendChatMessage(text, selectedModel, ragEnabled);
 
-    setMessagesMap(prev => ({
-      ...prev,
-      [currentConvId!]: [...(prev[currentConvId!] || []), streamingAssistantMsg],
-    }));
-
-    // Trigger simulated AI stream response
-    simulateAiStreamResponse(
-      text,
-      selectedModel,
-      ragEnabled,
-      (_chunk, fullText) => {
-        setMessagesMap(prev => {
-          const currentMsgs = prev[currentConvId!] || [];
-          return {
-            ...prev,
-            [currentConvId!]: currentMsgs.map(m =>
-              m.id === streamMsgId ? { ...m, content: fullText } : m
-            ),
-          };
-        });
-      },
-      (finalMessage) => {
-        setMessagesMap(prev => {
-          const currentMsgs = prev[currentConvId!] || [];
-          return {
-            ...prev,
-            [currentConvId!]: currentMsgs.map(m =>
-              m.id === streamMsgId ? { ...finalMessage, id: streamMsgId } : m
-            ),
-          };
-        });
-        setIsLoading(false);
-      }
-    );
+    setMessagesMap(prev => {
+      const currentMsgs = prev[currentConvId!] || [];
+      return {
+        ...prev,
+        [currentConvId!]: [...currentMsgs, finalMessage],
+      };
+    });
+    setIsLoading(false);
   };
 
-  const handleUploadDocument = (file: File) => {
-    const newDoc: DocumentFile = {
-      id: 'doc-' + Date.now(),
-      name: file.name,
-      size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
-      status: 'indexed',
-      chunks: Math.floor(Math.random() * 15) + 5,
-      uploadTime: 'Just now',
-      type: file.name.split('.').pop() || 'file',
-    };
+  const handleUploadDocument = async (file: File) => {
+    const newDoc = await uploadDocumentApi(file);
     setDocuments(prev => [newDoc, ...prev]);
     setRagEnabled(true);
+    setSelectedDocumentId(newDoc.id);
   };
 
   const handleDeleteDocument = (id: string) => {
     setDocuments(prev => prev.filter(d => d.id !== id));
+    if (selectedDocumentId === id) {
+      setSelectedDocumentId(null);
+    }
   };
 
   return (
@@ -221,6 +197,7 @@ export const Home: React.FC = () => {
           onSelectConversation={handleSelectConversation}
           onNewChat={handleNewChat}
           onDeleteConversation={handleDeleteConversation}
+          onRenameConversation={handleRenameConversation}
         />
 
         {/* Central Chat Interface */}
@@ -241,6 +218,8 @@ export const Home: React.FC = () => {
           onDeleteDocument={handleDeleteDocument}
           ragEnabled={ragEnabled}
           setRagEnabled={setRagEnabled}
+          selectedDocumentId={selectedDocumentId}
+          onSelectDocument={setSelectedDocumentId}
         />
       </div>
     </div>

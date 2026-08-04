@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, MessageSquare, Trash2, Sparkles, UserCheck, Search, ChevronRight } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, Sparkles, UserCheck, Search, ChevronRight, Edit2 } from 'lucide-react';
 import { type Conversation } from '../services/api';
 
 interface SidebarProps {
@@ -9,6 +9,7 @@ interface SidebarProps {
   onSelectConversation: (id: string) => void;
   onNewChat: () => void;
   onDeleteConversation: (id: string) => void;
+  onRenameConversation: (id: string, newTitle: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -18,8 +19,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectConversation,
   onNewChat,
   onDeleteConversation,
+  onRenameConversation,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+
+  const handleEditClick = (e: React.MouseEvent, id: string, title: string) => {
+    e.stopPropagation();
+    setEditingId(id);
+    setEditTitle(title);
+  };
+
+  const handleRenameSubmit = (e: React.FormEvent, id: string) => {
+    e.preventDefault();
+    if (editTitle.trim()) {
+      onRenameConversation(id, editTitle.trim());
+    }
+    setEditingId(null);
+  };
 
   const filteredConversations = conversations.filter(c =>
     c.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -93,13 +111,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <div className="flex items-center gap-3 min-w-0 pr-2">
                   <MessageSquare className={`w-4 h-4 shrink-0 ${isActive ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
-                  <div className="truncate">
-                    <p className="text-xs font-medium truncate">{conv.title}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{conv.createdAt}</p>
+                  <div className="truncate flex-1">
+                    {editingId === conv.id ? (
+                      <form onSubmit={(e) => handleRenameSubmit(e, conv.id)}>
+                        <input
+                          autoFocus
+                          type="text"
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          onBlur={(e) => handleRenameSubmit(e, conv.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full bg-slate-900/50 border border-indigo-500/50 rounded px-1.5 py-0.5 text-xs text-white focus:outline-none"
+                        />
+                      </form>
+                    ) : (
+                      <>
+                        <p className="text-xs font-medium truncate">{conv.title}</p>
+                        <p className="text-[10px] text-slate-500 truncate">{conv.createdAt}</p>
+                      </>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                  <button
+                    onClick={(e) => handleEditClick(e, conv.id, conv.title)}
+                    className="p-1 rounded-lg hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-400 transition-colors"
+                    title="Rename Conversation"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

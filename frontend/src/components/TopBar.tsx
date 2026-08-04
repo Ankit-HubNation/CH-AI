@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PanelLeft, FileText, ChevronDown, Sparkles, Sliders, ShieldCheck, Zap } from 'lucide-react';
-import { AVAILABLE_MODELS, type ModelOption } from '../services/api';
+import { fetchModels, type ModelOption } from '../services/api';
 
 interface TopBarProps {
   sidebarOpen: boolean;
@@ -26,7 +26,29 @@ export const TopBar: React.FC<TopBarProps> = ({
   documentCount,
 }) => {
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
-  const activeModelObj = AVAILABLE_MODELS.find(m => m.id === selectedModel) || AVAILABLE_MODELS[0];
+  const [models, setModels] = useState<ModelOption[]>([]);
+
+  useEffect(() => {
+    fetchModels().then(data => {
+      if (data.length > 0) {
+        setModels(data);
+        if (data.some(m => m.id === 'qwen3:8b')) {
+          setSelectedModel('qwen3:8b');
+        } else {
+          setSelectedModel(data[0].id);
+        }
+      }
+    });
+  }, [setSelectedModel]);
+
+  const activeModelObj = models.find(m => m.id === selectedModel) || models[0] || {
+    id: 'loading',
+    name: 'Loading...',
+    provider: '',
+    description: '',
+    tag: 'Wait',
+    supportsRAG: false
+  };
 
   return (
     <header className="h-16 px-4 border-b border-white/10 flex items-center justify-between glass-panel z-20 sticky top-0 backdrop-blur-xl">
@@ -67,7 +89,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
                 </div>
                 <div className="space-y-1">
-                  {AVAILABLE_MODELS.map((model: ModelOption) => (
+                  {models.map((model: ModelOption) => (
                     <button
                       key={model.id}
                       onClick={() => {

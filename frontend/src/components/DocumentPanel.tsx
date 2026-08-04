@@ -10,6 +10,8 @@ interface DocumentPanelProps {
   onDeleteDocument: (id: string) => void;
   ragEnabled: boolean;
   setRagEnabled: (enabled: boolean | ((prev: boolean) => boolean)) => void;
+  selectedDocumentId: string | null;
+  onSelectDocument: (id: string) => void;
 }
 
 export const DocumentPanel: React.FC<DocumentPanelProps> = ({
@@ -20,6 +22,8 @@ export const DocumentPanel: React.FC<DocumentPanelProps> = ({
   onDeleteDocument,
   ragEnabled,
   setRagEnabled,
+  selectedDocumentId,
+  onSelectDocument,
 }) => {
   const [topK, setTopK] = useState(5);
   const [similarityThreshold, setSimilarityThreshold] = useState(0.75);
@@ -126,13 +130,18 @@ export const DocumentPanel: React.FC<DocumentPanelProps> = ({
               documents.map((doc) => (
                 <div
                   key={doc.id}
-                  className="p-3 rounded-2xl glass-card border border-white/10 hover:border-white/20 transition-all duration-200 flex items-start justify-between"
+                  onClick={() => onSelectDocument(doc.id)}
+                  className={`p-3 rounded-2xl glass-card border transition-all duration-200 flex items-start justify-between cursor-pointer ${
+                    selectedDocumentId === doc.id
+                      ? 'bg-indigo-600/20 border-indigo-500/50 shadow-apple-glow text-white'
+                      : 'border-white/10 hover:border-white/20 text-slate-200'
+                  }`}
                 >
                   <div className="flex items-start gap-2.5 min-w-0 pr-2">
                     <FileText className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                     <div className="truncate">
-                      <p className="text-xs font-medium text-slate-200 truncate">{doc.name}</p>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                      <p className="text-xs font-medium truncate">{doc.name}</p>
+                      <div className={`flex items-center gap-2 mt-1 text-[10px] ${selectedDocumentId === doc.id ? 'text-indigo-200' : 'text-slate-400'}`}>
                         <span>{doc.size}</span>
                         <span>•</span>
                         <span className="text-indigo-300">{doc.chunks} chunks</span>
@@ -146,7 +155,7 @@ export const DocumentPanel: React.FC<DocumentPanelProps> = ({
                       Ready
                     </span>
                     <button
-                      onClick={() => onDeleteDocument(doc.id)}
+                      onClick={(e) => { e.stopPropagation(); onDeleteDocument(doc.id); }}
                       className="p-1 rounded-lg hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 transition-colors"
                       title="Remove Document"
                     >
