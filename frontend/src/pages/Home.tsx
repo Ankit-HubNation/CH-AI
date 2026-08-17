@@ -4,7 +4,6 @@ import { Sidebar } from '../components/Sidebar';
 import { ChatWindow } from '../components/ChatWindow';
 import { DocumentPanel } from '../components/DocumentPanel';
 import {
-  INITIAL_CONVERSATIONS,
   INITIAL_DOCUMENTS,
   type Conversation,
   type Message,
@@ -14,15 +13,18 @@ import {
   fetchMessages,
   deleteConversationApi,
   renameConversationApi,
-  uploadDocumentApi,
-  chatWithDocumentApi
+  chatWithDocumentApi,
+  createConversationApi,
+  fetchHardware,
+  uploadDocumentApi
 } from '../services/api';
 
 export const Home: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [documentPanelOpen, setDocumentPanelOpen] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('gemini-1.5-pro');
+  const [selectedModel, setSelectedModel] = useState('qwen2.5:3b');
   const [ragEnabled, setRagEnabled] = useState(true);
+  const [cpuMode, setCpuMode] = useState(false);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -37,6 +39,12 @@ export const Home: React.FC = () => {
         setActiveConversationId(data[0].id);
         const msgs = await fetchMessages(data[0].id);
         setMessagesMap(prev => ({ ...prev, [data[0].id]: msgs }));
+      }
+    });
+    
+    fetchHardware().then(data => {
+      if (data.cpu_mode) {
+        setCpuMode(true);
       }
     });
   }, []);
@@ -56,18 +64,18 @@ export const Home: React.FC = () => {
     }
   };
 
-  const handleNewChat = () => {
-    const newId = 'conv-' + Date.now();
-    const newConv: Conversation = {
-      id: newId,
-      title: 'New Conversation',
-      createdAt: 'Just now',
-      lastMessage: '',
-      model: selectedModel,
-    };
-    setConversations(prev => [newConv, ...prev]);
-    setActiveConversationId(newId);
-    setMessagesMap(prev => ({ ...prev, [newId]: [] }));
+  const handleNewChat = async () => {
+    try {
+      const newConv = await createConversationApi();
+      // Ensure the title and model are updated locally for UI consistency initially
+      newConv.title = 'New Conversation';
+      newConv.model = selectedModel;
+      setConversations(prev => [newConv, ...prev]);
+      setActiveConversationId(newConv.id.toString());
+      setMessagesMap(prev => ({ ...prev, [newConv.id]: [] }));
+    } catch (e) {
+      console.error("Failed to create new chat");
+    }
   };
 
   const handleDeleteConversation = async (id: string) => {
@@ -102,16 +110,18 @@ export const Home: React.FC = () => {
 
     // If no active conversation exists, create a new one
     if (!currentConvId) {
-      currentConvId = 'conv-' + Date.now();
-      const newConv: Conversation = {
-        id: currentConvId,
-        title: text.slice(0, 30) + (text.length > 30 ? '...' : ''),
-        createdAt: 'Just now',
-        lastMessage: text,
-        model: selectedModel,
-      };
-      setConversations(prev => [newConv, ...prev]);
-      setActiveConversationId(currentConvId);
+      try {
+        const newConv = await createConversationApi();
+        currentConvId = newConv.id.toString();
+        newConv.title = text.slice(0, 30) + (text.length > 30 ? '...' : '');
+        newConv.lastMessage = text;
+        newConv.model = selectedModel;
+        setConversations(prev => [newConv, ...prev]);
+        setActiveConversationId(currentConvId);
+      } catch (e) {
+        console.error("Failed to create conversation before sending message");
+        return;
+      }
     } else {
       // Update existing conversation title if it was "New Conversation"
       setConversations(prev =>
@@ -146,7 +156,7 @@ export const Home: React.FC = () => {
 
     const finalMessage = ragEnabled && selectedDocumentId
       ? await chatWithDocumentApi(text, selectedModel, selectedDocumentId)
-      : await sendChatMessage(text, selectedModel, ragEnabled);
+      : await sendChatMessage(currentConvId!, text, selectedModel, ragEnabled);
 
     setMessagesMap(prev => {
       const currentMsgs = prev[currentConvId!] || [];
@@ -185,6 +195,7 @@ export const Home: React.FC = () => {
         ragEnabled={ragEnabled}
         setRagEnabled={setRagEnabled}
         documentCount={documents.length}
+        cpuMode={cpuMode}
       />
 
       {/* Main Container Area */}

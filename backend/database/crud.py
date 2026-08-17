@@ -4,7 +4,33 @@ from database.connection import SessionLocal
 from database.models import Conversation, Message
 
 
-def create_chat(model="qwen3:8b"):
+def serialize_chat(chat):
+    if not chat:
+        return None
+
+    return {
+        "id": chat.id,
+        "title": chat.title,
+        "model": chat.model,
+        "created_at": chat.created_at,
+        "updated_at": chat.updated_at
+    }
+
+
+def serialize_message(message):
+    if not message:
+        return None
+
+    return {
+        "id": message.id,
+        "conversation_id": message.conversation_id,
+        "role": message.role,
+        "content": message.content,
+        "created_at": message.created_at
+    }
+
+
+def create_chat(model="qwen2.5:3b"):
 
     db = SessionLocal()
 
@@ -15,9 +41,11 @@ def create_chat(model="qwen3:8b"):
     db.add(chat)
     db.commit()
     db.refresh(chat)
+    result = serialize_chat(chat)
+
     db.close()
 
-    return chat
+    return result
 
 
 def get_chats():
@@ -30,9 +58,14 @@ def get_chats():
         .all()
     )
 
+    result = [
+        serialize_chat(chat)
+        for chat in chats
+    ]
+
     db.close()
 
-    return chats
+    return result
 
 
 def get_chat(chat_id: int):
@@ -45,9 +78,11 @@ def get_chat(chat_id: int):
         .first()
     )
 
+    result = serialize_chat(chat)
+
     db.close()
 
-    return chat
+    return result
 
 
 def search_chats(query: str):
@@ -65,9 +100,14 @@ def search_chats(query: str):
         .all()
     )
 
+    result = [
+        serialize_chat(chat)
+        for chat in chats
+    ]
+
     db.close()
 
-    return chats
+    return result
 
 
 def delete_chat(chat_id: int):
@@ -106,14 +146,28 @@ def update_chat_title(chat_id: int, title: str):
         db.commit()
         db.refresh(chat)
 
+    result = serialize_chat(chat)
+
     db.close()
 
-    return chat
+    return result
 
 
 def add_message(chat_id: int, role: str, content: str):
 
     db = SessionLocal()
+
+    chat = (
+        db.query(Conversation)
+        .filter(Conversation.id == chat_id)
+        .first()
+    )
+
+    if not chat:
+
+        db.close()
+
+        return None
 
     message = Message(
         conversation_id=chat_id,
@@ -123,21 +177,14 @@ def add_message(chat_id: int, role: str, content: str):
 
     db.add(message)
 
-    chat = (
-        db.query(Conversation)
-        .filter(Conversation.id == chat_id)
-        .first()
-    )
-
-    if chat:
-
-        chat.updated_at = datetime.utcnow()
+    chat.updated_at = datetime.utcnow()
 
     db.commit()
     db.refresh(message)
+    result = serialize_message(message)
     db.close()
 
-    return message
+    return result
 
 
 def get_messages(chat_id: int):
@@ -151,9 +198,14 @@ def get_messages(chat_id: int):
         .all()
     )
 
+    result = [
+        serialize_message(message)
+        for message in messages
+    ]
+
     db.close()
 
-    return messages
+    return result
 
 
 def get_conversation_context(chat_id: int):
@@ -235,7 +287,7 @@ def import_chat(data: dict):
 
     chat = Conversation(
         title=data.get("title", "Imported Chat"),
-        model=data.get("model", "qwen3:8b")
+        model=data.get("model", "qwen2.5:3b")
     )
 
     db.add(chat)
@@ -256,7 +308,7 @@ def import_chat(data: dict):
 
     db.commit()
     db.refresh(chat)
-
+    result = serialize_chat(chat)
     db.close()
 
-    return chat
+    return result

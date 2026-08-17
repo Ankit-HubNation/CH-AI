@@ -30,7 +30,7 @@ class Conversation(Base):
 
     model = Column(
         String(100),
-        default="qwen3:8b"
+        default="qwen2.5:3b"
     )
 
     created_at = Column(

@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from database.crud import (
@@ -44,7 +44,15 @@ def search(query: str):
 @router.get("/conversation/{chat_id}")
 def conversation(chat_id: int):
 
-    return get_chat(chat_id)
+    chat = get_chat(chat_id)
+
+    if not chat:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
+
+    return chat
 
 
 @router.get("/conversation/{chat_id}/export")
@@ -69,6 +77,12 @@ def rename_chat(
         chat_id,
         request.title
     )
+
+    if not chat:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
 
     return chat
 

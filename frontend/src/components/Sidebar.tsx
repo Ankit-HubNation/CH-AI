@@ -58,7 +58,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div>
             <h1 className="font-bold text-lg tracking-tight gradient-text-apple">CH-AI</h1>
-            <p className="text-[10px] text-slate-400 font-mono tracking-wider uppercase">Apple Intelligence UI</p>
           </div>
         </div>
 

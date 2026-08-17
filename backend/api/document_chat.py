@@ -6,7 +6,6 @@ from pypdf import PdfReader
 
 from services.ollama_service import OllamaService
 from services.chunk_service import split_text
-from services.vector_store import VectorStore
 
 
 router = APIRouter()
@@ -19,6 +18,7 @@ class DocumentRequest(BaseModel):
     filename: str
     question: str
     model: str = "qwen2.5:3b"
+    cpu_mode: bool = False
 
 
 @router.post("/chat-with-document")
@@ -74,6 +74,15 @@ def chat_with_document(request: DocumentRequest):
             overlap=20
         )
 
+        try:
+            from services.vector_store import VectorStore
+        except ModuleNotFoundError as exc:
+            if exc.name == "sentence_transformers":
+                return {
+                    "error": "Document chat requires sentence-transformers. Install backend requirements to enable RAG."
+                }
+            raise
+
         store = VectorStore()
 
         store.add_chunks(chunks)
@@ -99,10 +108,16 @@ Question:
 Answer:
 """
 
-        answer = service.generate(
+        answer, auto_switched = service.generate(
             prompt=prompt,
-            model=request.model
+            model=request.model,
+            cpu_mode=request.cpu_mode
         )
+
+        if auto_switched:
+            return {
+                "error": "Model failed to load. CPU fallback enabled."
+            }
 
         return {
             "filename": request.filename,

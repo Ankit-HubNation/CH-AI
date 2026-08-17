@@ -12,6 +12,7 @@ interface TopBarProps {
   ragEnabled: boolean;
   setRagEnabled: (enabled: boolean | ((prev: boolean) => boolean)) => void;
   documentCount: number;
+  cpuMode: boolean;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -24,26 +25,39 @@ export const TopBar: React.FC<TopBarProps> = ({
   ragEnabled,
   setRagEnabled,
   documentCount,
+  cpuMode,
 }) => {
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [models, setModels] = useState<ModelOption[]>([]);
-
+  const [fetchError, setFetchError] = useState(false);
   useEffect(() => {
     fetchModels().then(data => {
       if (data.length > 0) {
-        setModels(data);
-        if (data.some(m => m.id === 'qwen3:8b')) {
-          setSelectedModel('qwen3:8b');
+        const safeModels = data.filter(m => !['qwen3:8b', 'qwen2.5-coder:7b'].includes(m.id));
+        setModels(safeModels);
+        if (safeModels.some(m => m.id === 'qwen2.5:3b')) {
+          setSelectedModel('qwen2.5:3b');
         } else {
-          setSelectedModel(data[0].id);
+          if (safeModels.length > 0) {
+            setSelectedModel(safeModels[0].id);
+          }
         }
       }
+    }).catch(() => {
+      setFetchError(true);
     });
   }, [setSelectedModel]);
 
-  const activeModelObj = models.find(m => m.id === selectedModel) || models[0] || {
+  const activeModelObj = fetchError ? {
+    id: 'error',
+    name: 'Error loading models',
+    provider: '',
+    description: '',
+    tag: 'Error',
+    supportsRAG: false
+  } : models.find(m => m.id === selectedModel) || models[0] || {
     id: 'loading',
-    name: 'Loading...',
+    name: 'Loading models...',
     provider: '',
     description: '',
     tag: 'Wait',
@@ -127,7 +141,10 @@ export const TopBar: React.FC<TopBarProps> = ({
       <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-500/10 via-cyan-500/10 to-pink-500/10 border border-white/10">
         <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
         <span className="text-xs font-medium bg-gradient-to-r from-indigo-300 via-cyan-200 to-pink-300 bg-clip-text text-transparent">
-          Apple Intelligence Engine Active
+          {activeModelObj.name}
+        </span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/10">
+          {cpuMode ? 'CPU' : 'GPU'}
         </span>
       </div>
 

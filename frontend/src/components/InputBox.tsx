@@ -47,7 +47,7 @@ export const InputBox: React.FC<InputBoxProps> = ({
   const toggleVoiceRecording = () => {
     setIsRecording(!isRecording);
     if (!isRecording) {
-      setInputText('Draft an Apple Intelligence glassmorphism interface specification.');
+      setInputText('Draft a Document Intelligence glassmorphism interface specification.');
     }
   };
 
@@ -71,7 +71,7 @@ export const InputBox: React.FC<InputBoxProps> = ({
         </div>
       )}
 
-      {/* Floating Apple Intelligence Input Box */}
+      {/* Floating Knowledge Layer Input Box */}
       <div className={`relative rounded-3xl p-[1.5px] transition-all duration-300 ${
         isLoading || inputText.trim().length > 0
           ? 'bg-gradient-to-r from-indigo-500 via-cyan-400 to-pink-500 shadow-apple-glow-lg'

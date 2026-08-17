@@ -7,6 +7,7 @@ export interface Message {
   reasoningTime?: number;
   citations?: string[];
   attachedFiles?: string[];
+  autoSwitchedToCpu?: boolean;
 }
 
 export interface Conversation {
@@ -36,17 +37,68 @@ export interface ModelOption {
   supportsRAG: boolean;
 }
 
+const API_BASE_URL = "http://127.0.0.1:8000";
+console.log("API base URL:", API_BASE_URL);
+
 export let AVAILABLE_MODELS: ModelOption[] = [];
+
+const formatTimestamp = (value?: string): string => {
+  if (!value) {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const normalizeConversation = (item: any): Conversation => ({
+  id: String(item.id),
+  title: item.title || 'New Chat',
+  createdAt: formatTimestamp(item.created_at || item.createdAt),
+  lastMessage: item.last_message || item.lastMessage || '',
+  model: item.model || 'qwen2.5:3b',
+});
+
+const normalizeMessage = (item: any): Message => ({
+  id: String(item.id ?? `msg-${Date.now()}`),
+  sender: item.sender || item.role || 'assistant',
+  content: item.content || item.response || item.answer || item.message || '',
+  timestamp: formatTimestamp(item.created_at || item.timestamp),
+  reasoningTime: item.reasoningTime,
+  citations: item.citations,
+  attachedFiles: item.attachedFiles,
+  autoSwitchedToCpu: item.auto_switched_to_cpu || item.autoSwitchedToCpu,
+});
+
+const getResponseText = (data: any): string => {
+  if (typeof data === 'string') {
+    return data;
+  }
+
+  return data.response || data.answer || data.reply || data.message || data.content || JSON.stringify(data);
+};
 
 export const fetchModels = async (): Promise<ModelOption[]> => {
   try {
-    const response = await fetch('http://127.0.0.1:8000/models');
+    const response = await fetch(`${API_BASE_URL}/models`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
+    console.log("Models response:", data); // Temporary debug
     
-    AVAILABLE_MODELS = data.map((m: any) => {
+    const modelsList = Array.isArray(data) ? data : (data.models || data.data || []);
+    
+    AVAILABLE_MODELS = modelsList.map((m: any) => {
       if (typeof m === 'string') {
         return {
           id: m,
@@ -69,14 +121,30 @@ export const fetchModels = async (): Promise<ModelOption[]> => {
     return AVAILABLE_MODELS;
   } catch (error) {
     console.error('Failed to fetch models:', error);
-    return [];
+    throw error;
   }
+};
+
+export const fetchHardware = async (): Promise<{ vram_mb: number; cpu_mode: boolean }> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/hardware`);
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        vram_mb: data.vram_mb,
+        cpu_mode: data.vram_mb < 6000
+      };
+    }
+  } catch (e) {
+    console.error("Failed to fetch hardware stats:", e);
+  }
+  return { vram_mb: 8192, cpu_mode: false };
 };
 
 export const INITIAL_CONVERSATIONS: Conversation[] = [
   {
     id: 'conv-1',
-    title: 'Apple Intelligence Glassmorphism UI',
+    title: 'Multi-Model Workspace Glassmorphism UI',
     createdAt: 'Today 12:45 PM',
     lastMessage: 'Here is the sleek design layout using Tailwind...',
     model: 'gemini-1.5-pro'
@@ -100,7 +168,7 @@ export const INITIAL_CONVERSATIONS: Conversation[] = [
 export const INITIAL_DOCUMENTS: DocumentFile[] = [
   {
     id: 'doc-1',
-    name: 'Apple_Intelligence_Design_Guidelines.pdf',
+    name: 'CH-AI_Design_Guidelines.pdf',
     size: '2.4 MB',
     status: 'indexed',
     chunks: 24,
@@ -119,26 +187,40 @@ export const INITIAL_DOCUMENTS: DocumentFile[] = [
 ];
 
 export const sendChatMessage = async (
-  userQuery: string,
-  modelId: string,
-  ragEnabled: boolean
+  conversationId: string | number,
+  message: string,
+  model: string,
+  _ragEnabled: boolean
 ): Promise<Message> => {
   try {
-    const response = await fetch('http://127.0.0.1:8000/chat', {
+    const conversation_id = Number(conversationId);
+    console.log("Sending payload:", {
+      conversation_id,
+      message,
+      model
+    });
+
+    const response = await fetch(`${API_BASE_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: userQuery,
-        model: modelId
+        conversation_id,
+        message,
+        model
       })
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      let errorData = `HTTP error! status: ${response.status}`;
+      try {
+        const errJson = await response.json();
+        errorData = JSON.stringify(errJson);
+      } catch (e) {}
+      throw new Error(errorData);
     }
     
     const data = await response.json();
-    const textContent = data.response || data.reply || data.message || data.content || typeof data === 'string' ? data : JSON.stringify(data);
+    const textContent = getResponseText(data);
     
     return {
       id: 'msg-' + Date.now(),
@@ -146,14 +228,15 @@ export const sendChatMessage = async (
       content: textContent,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       reasoningTime: data.reasoningTime || 0.5,
-      citations: data.citations
+      citations: data.citations,
+      autoSwitchedToCpu: data.auto_switched_to_cpu
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to send message:', error);
     return {
       id: 'msg-' + Date.now(),
       sender: 'assistant',
-      content: 'Error communicating with backend. Please try again later.',
+      content: error.message || 'Error communicating with backend. Please try again later.',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
   }
@@ -161,20 +244,42 @@ export const sendChatMessage = async (
 
 export const fetchConversations = async (): Promise<Conversation[]> => {
   try {
-    const response = await fetch('http://127.0.0.1:8000/conversations');
+    const response = await fetch(`${API_BASE_URL}/conversation`);
     if (!response.ok) throw new Error('Failed to fetch conversations');
-    return await response.json();
+    const data = await response.json();
+    console.log("Conversations response:", data);
+    return (Array.isArray(data) ? data : []).map(normalizeConversation);
   } catch (e) {
     console.error(e);
     return [];
   }
 };
 
-export const fetchMessages = async (conversationId: string): Promise<Message[]> => {
+export const createConversationApi = async (): Promise<Conversation> => {
   try {
-    const response = await fetch(`http://127.0.0.1:8000/messages/${conversationId}`);
+    const response = await fetch(`${API_BASE_URL}/conversation`, {
+      method: 'POST'
+    });
+    if (!response.ok) throw new Error('Failed to create conversation');
+    return normalizeConversation(await response.json());
+  } catch (e) {
+    console.error(e);
+    throw e;
+  }
+};
+
+export const fetchMessages = async (chatId: string): Promise<Message[]> => {
+  try {
+    const url = `${API_BASE_URL}/conversation/${chatId}/message`;
+    console.log("Chat ID:", chatId);
+    console.log(
+      "Loading messages from:",
+      `${API_BASE_URL}/conversation/${chatId}/message`
+    );
+    const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch messages');
-    return await response.json();
+    const data = await response.json();
+    return (Array.isArray(data) ? data : []).map(normalizeMessage);
   } catch (e) {
     console.error(e);
     return [];
@@ -183,7 +288,7 @@ export const fetchMessages = async (conversationId: string): Promise<Message[]> 
 
 export const deleteConversationApi = async (conversationId: string): Promise<void> => {
   try {
-    await fetch(`http://127.0.0.1:8000/conversation/${conversationId}`, {
+    await fetch(`${API_BASE_URL}/conversation/${conversationId}`, {
       method: 'DELETE'
     });
   } catch (e) {
@@ -193,8 +298,8 @@ export const deleteConversationApi = async (conversationId: string): Promise<voi
 
 export const renameConversationApi = async (conversationId: string, title: string): Promise<void> => {
   try {
-    await fetch(`http://127.0.0.1:8000/conversation/${conversationId}`, {
-      method: 'PUT',
+    await fetch(`${API_BASE_URL}/conversation/${conversationId}`, {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title })
     });
@@ -207,12 +312,21 @@ export const uploadDocumentApi = async (file: File): Promise<DocumentFile> => {
   const formData = new FormData();
   formData.append('file', file);
   try {
-    const response = await fetch('http://127.0.0.1:8000/upload', {
+    const response = await fetch(`${API_BASE_URL}/upload`, {
       method: 'POST',
       body: formData
     });
     if (!response.ok) throw new Error('Failed to upload document');
-    return await response.json();
+    const data = await response.json();
+    return {
+      id: data.filename || file.name,
+      name: data.filename || file.name,
+      size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
+      status: 'indexed',
+      chunks: data.content ? Math.max(1, Math.ceil(data.content.length / 500)) : 1,
+      uploadTime: 'Just now',
+      type: file.name.split('.').pop() || 'file',
+    };
   } catch (e) {
     console.error(e);
     return {
@@ -233,13 +347,13 @@ export const chatWithDocumentApi = async (
   documentId: string
 ): Promise<Message> => {
   try {
-    const response = await fetch('http://127.0.0.1:8000/chat-with-document', {
+    const response = await fetch(`${API_BASE_URL}/chat-with-document`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: userQuery,
+        question: userQuery,
         model: modelId,
-        document_id: documentId
+        filename: documentId
       })
     });
     
@@ -248,7 +362,7 @@ export const chatWithDocumentApi = async (
     }
     
     const data = await response.json();
-    const textContent = data.response || data.reply || data.message || data.content || typeof data === 'string' ? data : JSON.stringify(data);
+    const textContent = getResponseText(data);
     
     return {
       id: 'msg-' + Date.now(),
@@ -256,7 +370,8 @@ export const chatWithDocumentApi = async (
       content: textContent,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       reasoningTime: data.reasoningTime || 0.5,
-      citations: data.citations
+      citations: data.citations,
+      autoSwitchedToCpu: data.auto_switched_to_cpu
     };
   } catch (error) {
     console.error('Failed to chat with document:', error);

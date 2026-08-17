@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from services.ollama_service import OllamaService
@@ -21,6 +21,7 @@ class ChatRequest(BaseModel):
     conversation_id: int
     message: str
     model: Optional[str] = None
+    cpu_mode: bool = True
 
 
 @router.post("/chat")
@@ -34,10 +35,13 @@ def chat(request: ChatRequest):
 
     print("STEP 2")
 
-    if (
-        chat_data
-        and chat_data.title == "New Chat"
-    ):
+    if not chat_data:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
+
+    if chat_data["title"] == "New Chat":
 
         title = request.message[:40]
 
@@ -48,11 +52,17 @@ def chat(request: ChatRequest):
 
     print("STEP 3")
 
-    add_message(
+    user_message = add_message(
         request.conversation_id,
         "user",
         request.message
     )
+
+    if not user_message:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
 
     print("STEP 4")
 
@@ -63,10 +73,17 @@ def chat(request: ChatRequest):
     print("STEP 5")
     print(history)
 
-    response = service.generate(
+    response, auto_switched = service.generate(
         prompt=history,
-        model=request.model
+        model=request.model,
+        cpu_mode=request.cpu_mode
     )
+
+    if auto_switched:
+        raise HTTPException(
+            status_code=502,
+            detail=response
+        )
 
     print("STEP 6")
 
