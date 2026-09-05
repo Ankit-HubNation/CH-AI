@@ -35,8 +35,8 @@ export const TopBar: React.FC<TopBarProps> = ({
       if (data.length > 0) {
         const safeModels = data.filter(m => !['qwen3:8b', 'qwen2.5-coder:7b'].includes(m.id));
         setModels(safeModels);
-        if (safeModels.some(m => m.id === 'qwen2.5:3b')) {
-          setSelectedModel('qwen2.5:3b');
+        if (safeModels.some(m => m.id === 'qwen2.5:1.5b')) {
+          setSelectedModel('qwen2.5:1.5b');
         } else {
           if (safeModels.length > 0) {
             setSelectedModel(safeModels[0].id);

@@ -22,7 +22,7 @@ import {
 export const Home: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [documentPanelOpen, setDocumentPanelOpen] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('qwen2.5:3b');
+  const [selectedModel, setSelectedModel] = useState('qwen2.5:1.5b');
   const [ragEnabled, setRagEnabled] = useState(true);
   const [cpuMode, setCpuMode] = useState(false);
 

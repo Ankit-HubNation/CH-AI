@@ -65,7 +65,7 @@ const normalizeConversation = (item: any): Conversation => ({
   title: item.title || 'New Chat',
   createdAt: formatTimestamp(item.created_at || item.createdAt),
   lastMessage: item.last_message || item.lastMessage || '',
-  model: item.model || 'qwen2.5:3b',
+  model: item.model || 'qwen2.5:1.5b',
 });
 
 const normalizeMessage = (item: any): Message => ({

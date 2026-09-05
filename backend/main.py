@@ -50,7 +50,7 @@ def find_conversation(conversation_id: int) -> dict[str, Any] | None:
 class ChatRequest(BaseModel):
     conversation_id: int | None = None
     message: str
-    model: str = "qwen2.5:3b"
+    model: str = "qwen2.5:1.5b"
     attachments: list[dict[str, str]] = []
 
 
@@ -60,7 +60,7 @@ class RenameRequest(BaseModel):
 
 class DocumentChatRequest(BaseModel):
     question: str
-    model: str = "qwen2.5:3b"
+    model: str = "qwen2.5:1.5b"
     filename: str
 
 
@@ -108,8 +108,8 @@ def get_hardware() -> dict[str, int]:
 def models() -> list[dict[str, Any]]:
     return [
         {
-            "id": "qwen2.5:3b",
-            "name": "Qwen 2.5 3B",
+            "id": "qwen2.5:1.5b",
+            "name": "Qwen 2.5 1.5B",
             "provider": "Local",
             "description": "Local assistant model",
             "tag": "Local",
@@ -158,7 +158,7 @@ def create_conversation() -> dict[str, Any]:
         "title": "New Chat",
         "created_at": now(),
         "last_message": "",
-        "model": "qwen2.5:3b",
+        "model": "qwen2.5:1.5b",
     }
     state["conversations"].append(conversation)
     state["messages"][str(conversation_id)] = []
