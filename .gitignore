@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets and local configuration
+.env
+*.key
+*.pem
+
+# Runtime data
+*.db
+data/backend_state.json
+uploads/
+logs/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+
+# Editor and caches
+.vscode/
+.cache/
+.npm-cache/
