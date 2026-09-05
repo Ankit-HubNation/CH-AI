@@ -211,7 +211,7 @@ def assistant_response(
     message: str, model: str, attachments: list[dict[str, str]] | None = None
 ) -> str:
     if os.getenv("CHAI_PROVIDER", "ollama").lower() == "ollama":
-        local_model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+        local_model = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
         images = []
         for attachment in attachments or []:
             data_url = attachment.get("data_url", "")
